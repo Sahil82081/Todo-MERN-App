@@ -1,18 +1,17 @@
-# 🚀 MERN App Deployment with Kubernetes & CI/CD
+# 🚀 Kubernetes Deployment (MERN App)
 
-This project demonstrates a complete **MERN stack deployment** using **Kubernetes (KIND)** along with a **CI/CD pipeline using GitHub Actions**. It also includes **Nginx reverse proxy configuration** to securely connect frontend and backend services.
+This branch (`kubernetes`) contains all the **Kubernetes manifests and deployment configurations** for running a MERN stack application on **Kubernetes (KIND on EC2)** with a **CI/CD pipeline using GitHub Actions**.
 
 ---
 
-## 📌 Tech Stack
+## 📌 Overview
 
-* **Frontend:** React (Vite)
-* **Backend:** Node.js + Express
-* **Database:** MongoDB
-* **Containerization:** Docker
-* **Orchestration:** Kubernetes (KIND)
-* **CI/CD:** GitHub Actions
-* **Web Server:** Nginx (Reverse Proxy)
+This setup follows **production best practices**:
+
+* ✅ Backend is **private** (ClusterIP)
+* ✅ Frontend is **exposed** (NodePort / Port-forward)
+* ✅ Nginx is used as a **reverse proxy**
+* ✅ MongoDB runs as an **internal service**
 
 ---
 
@@ -21,8 +20,10 @@ This project demonstrates a complete **MERN stack deployment** using **Kubernete
 ```
 Browser
    ↓
-Frontend (NodePort / Nginx)
-   ↓  (/api proxy)
+EC2 Public IP
+   ↓
+Frontend (NodePort / Port-forward)
+   ↓  (/api via Nginx)
 Backend Service (ClusterIP)
    ↓
 MongoDB Service (ClusterIP)
@@ -30,37 +31,85 @@ MongoDB Service (ClusterIP)
 
 ---
 
-## ⚙️ Kubernetes Setup
+## 📂 Project Structure
 
-### Services Used
+```
+k8s/
+ ├── frontend-deployment.yaml
+ ├── frontend-service.yaml
+ ├── backend-deployment.yaml
+ ├── backend-service.yaml
+ ├── mongo-deployment.yaml
+ ├── mongo-service.yaml
+ ├── nginx.conf
+```
 
-| Service          | Type      | Purpose          |
-| ---------------- | --------- | ---------------- |
-| frontend-service | NodePort  | Exposes frontend |
-| backend-service  | ClusterIP | Internal API     |
-| mongo-service    | ClusterIP | Database         |
+---
+
+## ⚙️ Deployment Steps (EC2 + KIND)
+
+### 1️⃣ Connect to EC2
+
+```bash
+ssh ubuntu@<EC2-PUBLIC-IP>
+```
+
+### 2️⃣ Clone this branch
+
+```bash
+git clone -b kubernetes https://github.com/<your-username>/<repo-name>.git
+cd <repo-name>
+```
+
+### 3️⃣ Create Kubernetes cluster
+
+```bash
+kind create cluster
+```
+
+### 4️⃣ Apply all manifests
+
+```bash
+kubectl apply -f k8s/
+```
+
+---
+
+## 🌐 Access Application
+
+Since KIND runs inside Docker, NodePort is not directly exposed.
+
+### Use port-forward:
+
+```bash
+kubectl port-forward service/frontend-service 3000:80 --address 0.0.0.0
+```
+
+Open:
+
+```
+http://<EC2-IP>:3000
+```
 
 ---
 
 ## 🔐 Key Concept
 
-* Backend is **NOT exposed publicly**
-* Frontend communicates with backend using:
+* Frontend calls API using:
 
+  ```js
+  axios.get("/api/todos");
   ```
-  /api
-  ```
-* Nginx handles internal routing to:
+* Nginx internally routes:
 
   ```
   backend-service:5000
   ```
+* Backend is **never exposed publicly**
 
 ---
 
 ## 🌐 Nginx Configuration
-
-We modified the default Nginx configuration to enable reverse proxy:
 
 ```nginx
 server {
@@ -80,18 +129,12 @@ server {
 
 ### ⚠️ Important
 
-* Do **NOT** use trailing `/` in `proxy_pass`
-* React should call APIs like:
-
-  ```js
-  axios.get("/api/todos");
-  ```
+* ❌ Do NOT use trailing `/` in `proxy_pass`
+* ✅ Always use `/api` in frontend
 
 ---
 
-## 🐳 Docker Setup
-
-### Frontend Dockerfile
+## 🐳 Docker (Frontend)
 
 ```Dockerfile
 FROM nginx:alpine
@@ -106,126 +149,66 @@ EXPOSE 80
 
 ## 🔄 CI/CD Pipeline (GitHub Actions)
 
-### Workflow Steps
+### Workflow
 
-1. Trigger on push to `main`
+1. Push code to GitHub
 2. Build Docker images
-3. Push images to DockerHub
+3. Push to DockerHub
 4. Deploy to Kubernetes
 
-### Example Workflow
-
 ```yaml
-name: CI/CD Pipeline
-
 on:
   push:
-    branches: [ "main" ]
-
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Build Docker images
-        run: |
-          docker build -t <your-dockerhub>/frontend ./frontend
-          docker build -t <your-dockerhub>/backend ./backend
-
-      - name: Push to DockerHub
-        run: |
-          docker push <your-dockerhub>/frontend
-          docker push <your-dockerhub>/backend
-
-      - name: Deploy to Kubernetes
-        run: kubectl apply -f k8s/
+    branches:
+      - main
+      - kubernetes
 ```
 
 ---
 
-## 🚀 Running the Project
-
-### 1️⃣ Create KIND cluster
-
-```bash
-kind create cluster
-```
-
-### 2️⃣ Apply Kubernetes configs
-
-```bash
-kubectl apply -f k8s/
-```
-
-### 3️⃣ Access frontend
-
-Using port-forward:
-
-```bash
-kubectl port-forward service/frontend-service 3000:80 --address 0.0.0.0
-```
-
-Open:
-
-```
-http://<EC2-IP>:3000
-```
-
----
-
-## 🧪 Debugging Tips
-
-### Check pods
+## 🧪 Debugging
 
 ```bash
 kubectl get pods
-```
-
-### Check logs
-
-```bash
 kubectl logs <pod-name>
+kubectl exec -it <pod-name> -- sh
 ```
 
-### Test backend internally
+### Test backend from frontend pod:
 
 ```bash
-kubectl exec -it <frontend-pod> -- sh
 curl http://backend-service:5000/api/todos
 ```
 
 ---
 
-## ❗ Common Issues & Fixes
+## ❗ Common Issues
 
-| Issue                   | Solution                                          |
-| ----------------------- | ------------------------------------------------- |
-| `ERR_NAME_NOT_RESOLVED` | Use `/api` instead of backend-service in frontend |
-| 404 error               | Fix Nginx `proxy_pass` (remove trailing `/`)      |
-| NodePort not working    | Use port-forward in KIND                          |
-| Mongo not connecting    | Use `mongo-service` hostname                      |
+| Issue                 | Fix                                   |
+| --------------------- | ------------------------------------- |
+| ERR_NAME_NOT_RESOLVED | Use `/api` instead of backend-service |
+| 404 error             | Fix Nginx `proxy_pass`                |
+| NodePort not working  | Use port-forward (KIND)               |
+| Mongo not connecting  | Use `mongo-service`                   |
 
 ---
 
 ## 📚 Learnings
 
-* Difference between **NodePort vs ClusterIP**
-* Why frontend should not directly call backend service
-* Importance of **reverse proxy (Nginx)**
+* Kubernetes networking (ClusterIP vs NodePort)
+* Internal DNS (`service-name`)
+* Reverse proxy with Nginx
 * CI/CD automation using GitHub Actions
-* Kubernetes internal DNS (`service-name`)
+* Running Kubernetes on EC2 using KIND
 
 ---
 
-## 📌 Future Improvements
+## 🚀 Future Improvements
 
-* Add **Ingress Controller**
-* Setup **HTTPS with TLS**
-* Use **Helm charts**
-* Deploy on **EKS / GKE**
+* Add Ingress Controller
+* Enable HTTPS (TLS)
+* Use Helm charts
+* Deploy on AWS EKS
 
 ---
 
@@ -235,7 +218,6 @@ curl http://backend-service:5000/api/todos
 
 ---
 
-## ⭐ If you like this project
+## ⭐ Support
 
-Give it a ⭐ on GitHub!
-
+If you found this project helpful, give it a ⭐ on GitHub!
