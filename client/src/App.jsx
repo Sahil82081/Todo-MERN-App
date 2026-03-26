@@ -14,7 +14,7 @@ export default function App() {
   // 🔹 Fetch Todos
   const fetchTodos = useCallback(async (f = filter) => {
     try {
-      const { data } = await axios.get(`${API_URL}/api/todos`, {
+      const { data } = await axios.get(`/api/todos`, {
         params: { filter: f },
       });
       setTodos(data);
@@ -31,7 +31,7 @@ export default function App() {
   const handleAdd = async (data) => {
     setLoading(true);
     try {
-      await axios.post(`${API_URL}/api/todos`, data);
+      await axios.post(`/api/todos`, data);
       await fetchTodos();
     } finally {
       setLoading(false);
@@ -40,19 +40,19 @@ export default function App() {
 
   // 🔹 Toggle Todo
   const handleToggle = async (id) => {
-    await axios.patch(`${API_URL}/api/todos/${id}`);
+    await axios.patch(`/api/todos/${id}`);
     await fetchTodos();
   };
 
   // 🔹 Delete Todo
   const handleDelete = async (id) => {
-    await axios.delete(`${API_URL}/api/todos/${id}`);
+    await axios.delete(`/api/todos/${id}`);
     await fetchTodos();
   };
 
   // 🔹 Clear Completed
   const handleClearCompleted = async () => {
-    await axios.delete(`${API_URL}/api/todos/completed`);
+    await axios.delete(`/api/todos/completed`);
     await fetchTodos();
   };
 
